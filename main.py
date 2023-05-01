@@ -1,8 +1,6 @@
 from fastapi import FastAPI
+from gsheet import GSheet
 import uvicorn
-
-
-app = FastAPI()
 
 expenses = [
     {"name": "Продукты", "value": 3673.5},
@@ -15,6 +13,13 @@ expenses = [
     {"name": "Корм", "value": 635},
 ]
 
+app = FastAPI()
+
+@app.get("/gSheet")
+async def fetchGSheetData():
+    gSheet = GSheet()
+    data = await gSheet.fetchData()
+    return data
 
 
 @app.get("/expenses")
