@@ -22,11 +22,9 @@ class GSheet:
         # Пример чтения файла
         values = service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
-            range='A1:E10',
+            range='A5:B15',
             majorDimension='COLUMNS'
         ).execute()
         return values
-                
-
 
 
