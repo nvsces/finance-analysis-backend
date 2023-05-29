@@ -1,19 +1,17 @@
 import jwt
 import psycopg2
 from fastapi_users import fastapi_users, FastAPIUsers
-
-from auth.auth import auth_backend
-from auth.database import User
-from auth.manager import get_user_manager
-from auth.schemas import UserRead, UserCreate
 from gsheet import GSheet
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel
 import secrets
+from config import host, user, password, database, port
+import os
 
-class Input_code(BaseModel):
+
+class InputCode(BaseModel):
     code: str
 
 
@@ -24,18 +22,20 @@ app = FastAPI()
 # pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-@app.post("/expenses")
-async def expensesGSheetdata(item: Input_code):
+@app.post("/login")
+async def expensesGSheetdata(item: InputCode):
+
     code = item.code
 
     try:
+
         # Подключение к базе данных
         connection = psycopg2.connect(
-            host="178.250.157.195",
-            user="admin",
-            password="root",
-            database='postgres',
-            port='9999'
+            host=host,
+            user=user,
+            password=password,
+            database=database,
+            port=port,
         )
         connection.autocommit = True
 
@@ -44,16 +44,16 @@ async def expensesGSheetdata(item: Input_code):
                 """SELECT * FROM users WHERE code = %s;""",
                 (code,)
             )
-            data = cursor.fetchall()
+            data = cursor.fetchone()
 
             if data:
-                user_data = data[0]
+                user_data = data
                 payload = {"id": user_data[0], "username": user_data[1], "tg_id": user_data[2]}
                 secret_key = "oeurgoiwehrogouiheroiu"
                 token = jwt.encode(payload, secret_key, algorithm="HS256")
-                return token
+                return {"token": token}
             else:
-                return "Пользователь не найден"
+                return {"error": "Пользователь не найден"}
 
     except Exception as ex:
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
