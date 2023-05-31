@@ -3,7 +3,7 @@ import psycopg2
 from fastapi import FastAPI, Depends, HTTPException, status
 from pydantic import BaseModel
 from config import DB_NAME, DB_HOST, DB_PORT, DB_PASS, DB_USER
-from datetime import datetime
+from datetime import date, datetime
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 
@@ -120,7 +120,7 @@ async def add_subscription(sub: NewSub,user_id: int = Depends(get_current_user_i
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
-@app.put("/subs/subId")
+@app.put("/subs/{sub_id}")
 async def update_sub(sub_id: int, item: NewSub, user_id: int = Depends(get_current_user_id)):
 
     sub_name = item.sub_name
@@ -189,7 +189,7 @@ async def get_user_subs(user_id: int = Depends(get_current_user_id)):
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
-@app.delete("/subs")
+@app.delete("/subs/{sub_id}")
 async def delete_sub(sub_id: int, user_id: int = Depends(get_current_user_id)):
 
     try:
