@@ -93,7 +93,7 @@ async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depend
 
 
 
-@app.post("/subs/new/")
+@app.post("/subs")
 async def add_subscription(sub: NewSub,user_id: int = Depends(get_current_user_id)):
 
     try:
@@ -120,7 +120,7 @@ async def add_subscription(sub: NewSub,user_id: int = Depends(get_current_user_i
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
-@app.put("/subs/update/")
+@app.put("/subs/subId")
 async def update_sub(sub_id: int, item: NewSub, user_id: int = Depends(get_current_user_id)):
 
     sub_name = item.sub_name
@@ -152,7 +152,7 @@ async def update_sub(sub_id: int, item: NewSub, user_id: int = Depends(get_curre
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
-@app.get("/subs/my/")
+@app.get("/subs")
 async def get_user_subs(user_id: int = Depends(get_current_user_id)):
 
     try:
@@ -189,7 +189,7 @@ async def get_user_subs(user_id: int = Depends(get_current_user_id)):
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
-@app.delete("/subs/delete/")
+@app.delete("/subs")
 async def delete_sub(sub_id: int, user_id: int = Depends(get_current_user_id)):
 
     try:
