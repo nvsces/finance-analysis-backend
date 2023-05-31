@@ -1,12 +1,10 @@
 import jwt
 import psycopg2
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from pydantic import BaseModel
-import secrets
 from config import DB_NAME, DB_HOST, DB_PORT, DB_PASS, DB_USER
-import os
-from datetime import date, datetime
-from fastapi.responses import JSONResponse
+from datetime import datetime
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 
 class InputCode(BaseModel):
@@ -22,27 +20,35 @@ class NewSub(BaseModel):
     fk_subs_users: int
 
 
-
 app = FastAPI()
+security = HTTPBearer()
+
+connection = psycopg2.connect(
+    host=DB_HOST,
+    user=DB_USER,
+    password=DB_PASS,
+    database=DB_NAME,
+    port=DB_PORT,
+)
+connection.autocommit = True
 
 
+
+@app.on_event("startup")
+async def startup_event():
+    print("Сервер запущен")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    connection.close()
+    print("Сервер остановлен")
 @app.post("/login")
 async def expensesGSheetdata(item: InputCode):
 
     code = item.code
 
     try:
-
-        # Подключение к базе данных
-        connection = psycopg2.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASS,
-            database=DB_NAME,
-            port=DB_PORT,
-        )
-        connection.autocommit = True
-
         with connection.cursor() as cursor:
             cursor.execute(
                 """SELECT * FROM users WHERE code = %s;""",
@@ -58,24 +64,37 @@ async def expensesGSheetdata(item: InputCode):
                 return {"token": token}
             else:
                 return {"error": "Пользователь не найден"}
-
     except Exception as ex:
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
+
+async def get_current_user_id(credentials: HTTPAuthorizationCredentials = Depends(security)):
+        token = credentials.credentials  # Получаем токен из заголовка авторизации
+
+        try:
+            secret_key = "oeurgoiwehrogouiheroiu"
+            payload = jwt.decode(token, secret_key, algorithms=["HS256"])
+            user_id = payload.get("id")
+            return user_id
+        except jwt.DecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Expired token",
+                headers={"WWW-Authenticate": "Bearer"},  )
+
+
+        except Exception as ex:
+            print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
 
 @app.post("/subs/new/")
-async def add_subscription(sub: NewSub, user_id: int):
-
-    # Подключение к базе данных
-    connection = psycopg2.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASS,
-        database=DB_NAME,
-        port=DB_PORT,
-    )
-    connection.autocommit = True
+async def add_subscription(sub: NewSub,user_id: int = Depends(get_current_user_id)):
 
     try:
         with connection.cursor() as cursor:
@@ -101,8 +120,9 @@ async def add_subscription(sub: NewSub, user_id: int):
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
-@app.put("/subs/update/{sub_id}")
-async def update_sub(sub_id: int, item: NewSub):
+@app.put("/subs/update/")
+async def update_sub(sub_id: int, item: NewSub, user_id: int = Depends(get_current_user_id)):
+
     sub_name = item.sub_name
     sub_price = item.sub_price
     sub_currency = item.sub_currency
@@ -111,48 +131,45 @@ async def update_sub(sub_id: int, item: NewSub):
     fk_subs_users = item.fk_subs_users
 
     try:
-        connection = psycopg2.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASS,
-            database=DB_NAME,
-            port=DB_PORT,
-        )
-        connection.autocommit = True
-
         with connection.cursor() as cursor:
+
             cursor.execute(
-                """UPDATE subs SET sub_name = %s, sub_price = %s, sub_currency = %s, sub_date = %s,
-                 sub_period = %s, fk_subs_users = %s WHERE id = %s;""",
-                (sub_name, sub_price, sub_currency, sub_date, sub_period, fk_subs_users, sub_id)
+                "SELECT * FROM subs WHERE id = %s AND fk_subs_users = %s;",
+                (sub_id, user_id),
             )
-        return {"done": f"Подписка {sub_id} успешно обновлена!"}
+            sub_data = cursor.fetchone()
+
+            if sub_data:
+
+                cursor.execute(
+                    """UPDATE subs SET sub_name = %s, sub_price = %s, sub_currency = %s, sub_date = %s,
+                     sub_period = %s, fk_subs_users = %s WHERE id = %s;""",
+                    (sub_name, sub_price, sub_currency, sub_date, sub_period, fk_subs_users, sub_id)
+                )
+            return {"done": f"Подписка {sub_id} успешно обновлена!"}
 
     except Exception as ex:
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
-@app.get("/subs/my/{user_id}")
-async def get_user_subs(user_id: int):
-    try:
-        connection = psycopg2.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASS,
-            database=DB_NAME,
-            port=DB_PORT,
-        )
-        connection.autocommit = True
+@app.get("/subs/my/")
+async def get_user_subs(user_id: int = Depends(get_current_user_id)):
 
+    try:
         with connection.cursor() as cursor:
+
+
             cursor.execute(
                 """SELECT * FROM subs WHERE fk_subs_users = %s;""",
                 (user_id,)
             )
+
             subs = cursor.fetchall()
 
             if subs:
+
                 subs_list = []
+
                 for sub in subs:
                     sub_data = {
                         "sub_name": sub[1],
@@ -164,29 +181,21 @@ async def get_user_subs(user_id: int):
                     }
                     subs_list.append(sub_data)
 
-                return {"user_subs": subs_list}
+                return {"subscriptions": subs_list}
             else:
-                return {"message": "У пользователя нет подписок"}
+                return {"subscriptions": []}
 
     except Exception as ex:
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
 
 
-@app.delete("/subs/delete/{sub_id}")
-async def delete_sub(sub_id: int, user_id: int):
-
-
-    connection = psycopg2.connect(
-        host=DB_HOST,
-        user=DB_USER,
-        password=DB_PASS,
-        database=DB_NAME,
-        port=DB_PORT,
-    )
-    connection.autocommit = True
+@app.delete("/subs/delete/")
+async def delete_sub(sub_id: int, user_id: int = Depends(get_current_user_id)):
 
     try:
         with connection.cursor() as cursor:
+
+
             cursor.execute(
                 "SELECT * FROM subs WHERE id = %s AND fk_subs_users = %s;",
                 (sub_id, user_id),
@@ -202,6 +211,7 @@ async def delete_sub(sub_id: int, user_id: int):
                 return {"message": "Подписка успешно удалена."}
             else:
                 return {"error": "Подписка не найдена или не принадлежит пользователю."}
+
 
     except Exception as ex:
         print("[INFO] Ошибка при работе с PostgreSQL:", ex)
